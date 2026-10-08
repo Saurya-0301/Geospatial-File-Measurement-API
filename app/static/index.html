@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Geospatial File Measurement</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, system-ui, sans-serif; color: #172033; background: #f3f6fb; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; }
+    main { width: min(760px, calc(100% - 32px)); margin: 32px auto; }
+    .card { background: #fff; border: 1px solid #dce3ef; border-radius: 18px; padding: clamp(24px, 5vw, 44px); box-shadow: 0 16px 40px #20345b13; }
+    .eyebrow { color: #146c94; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: .78rem; }
+    h1 { font-size: clamp(1.8rem, 5vw, 2.8rem); margin: .5rem 0 .8rem; line-height: 1.1; }
+    p { color: #536174; line-height: 1.55; }
+    form { margin-top: 28px; display: grid; gap: 14px; }
+    input[type=file] { border: 1px dashed #9aabc3; border-radius: 12px; padding: 18px; background: #f8faff; }
+    button { border: 0; border-radius: 10px; background: #086788; color: white; padding: 13px 18px; font-weight: 700; cursor: pointer; width: fit-content; }
+    button:disabled { background: #8ba5b2; cursor: wait; }
+    #status { min-height: 1.4rem; font-weight: 650; }
+    .result { margin-top: 22px; border-top: 1px solid #e4e9f2; padding-top: 22px; }
+    .summary { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+    .tag { background: #e9f6fb; color: #07546f; border-radius: 999px; padding: 6px 10px; font-size: .88rem; font-weight: 650; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: .94rem; }
+    th, td { text-align: left; padding: 11px 8px; border-bottom: 1px solid #e7ebf1; vertical-align: top; }
+    th { color: #4e5c70; }
+    .note { font-size: .88rem; color: #64748b; margin-top: 24px; }
+    a { color: #086788; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <div class="eyebrow">Geospatial API</div>
+      <h1>Measure a map file</h1>
+      <p>Upload a KML file or a ZIP containing a Shapefile. Polygon areas and line lengths are calculated in metres using a local projected CRS.</p>
+      <form id="upload-form">
+        <input id="file" name="file" type="file" accept=".kml,.zip" required>
+        <button id="submit" type="submit">Upload and measure</button>
+      </form>
+      <div id="status" aria-live="polite"></div>
+      <section id="result" class="result" hidden></section>
+      <p class="note">Need the API instead? Open <a href="/docs">interactive API documentation</a>.</p>
+    </section>
+  </main>
+  <script>
+    const form = document.querySelector('#upload-form');
+    const input = document.querySelector('#file');
+    const button = document.querySelector('#submit');
+    const status = document.querySelector('#status');
+    const result = document.querySelector('#result');
+    const format = value => value == null ? '—' : typeof value === 'number' ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value;
+    const escapeHtml = value => String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (!input.files.length) return;
+      button.disabled = true;
+      status.textContent = 'Reading and measuring your file…';
+      result.hidden = true;
+      try {
+        const response = await fetch('/api/files/', { method: 'POST', body: new FormData(form) });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.detail || 'Upload failed.');
+        status.textContent = payload.status === 'COMPLETED' ? 'Done.' : 'The upload was saved, but it could not be processed.';
+        render(payload);
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    function render(file) {
+      if (file.status === 'FAILED') {
+        result.innerHTML = `<h2>Processing failed</h2><p>${escapeHtml(file.error || 'Unknown processing error')}</p>`;
+        result.hidden = false;
+        return;
+      }
+      const rows = file.features.map(feature => `<tr><td>${escapeHtml(feature.feature_id)}</td><td>${escapeHtml(feature.geometry_type)}</td><td>${format(feature.area_square_meters)}</td><td>${format(feature.length_meters)}</td><td>${escapeHtml(feature.measurement_note || '')}</td></tr>`).join('');
+      result.innerHTML = `<h2>Results</h2><div class="summary"><span class="tag">${file.feature_count} feature${file.feature_count === 1 ? '' : 's'}</span><span class="tag">Source: ${escapeHtml(file.crs || 'unknown')}</span><span class="tag">Measured in: ${escapeHtml(file.measurement_crs || 'not available')}</span></div><table><thead><tr><th>ID</th><th>Geometry</th><th>Area (m²)</th><th>Length (m)</th><th>Note</th></tr></thead><tbody>${rows}</tbody></table>`;
+      result.hidden = false;
+    }
+  </script>
+</body>
+</html>

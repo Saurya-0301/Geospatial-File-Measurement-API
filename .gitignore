@@ -1,0 +1,17 @@
+# Python bytecode and tooling caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local runtime data (will be used in the upload-processing stage)
+uploads/
+
+# Environment files
+.env
+.env.*
